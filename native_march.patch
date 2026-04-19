@@ -1,0 +1,51 @@
+diff --git a/cmake/therock_compiler_config.cmake b/cmake/therock_compiler_config.cmake
+index a40b8695..3b86efc0 100644
+--- a/cmake/therock_compiler_config.cmake
++++ b/cmake/therock_compiler_config.cmake
+@@ -99,3 +99,27 @@ if(APPLE)
+     message(STATUS "  Deployment target: ${CMAKE_OSX_DEPLOYMENT_TARGET}")
+   endif()
+ endif()
++
++# ---------------------------------------------------------------------------
++# Host CPU march tuning (opt-in, empty/disabled by default)
++# ---------------------------------------------------------------------------
++# Set to a non-empty march value to tune the host-side ROCm libraries for a
++# specific CPU microarchitecture. The flag is forwarded to every subproject
++# via the generated _toolchain.cmake files (see therock_subproject.cmake).
++#
++# Typical values:
++#   "native"  — auto-detect the build host CPU (build host == runtime host)
++#   "znver5"  — explicit Zen 5 (Strix Halo, Ryzen 9000) for cross-builds
++#
++# DO NOT set this for distributed packages — the resulting binaries are not
++# portable to CPUs that don't support the specified instruction set.
++set(THEROCK_HOST_MARCH "" CACHE STRING
++  "Host CPU -march value for non-portable local builds (e.g. 'native', 'znver5'). Empty = no flag.")
++
++if(THEROCK_HOST_MARCH)
++  if(NOT MSVC)
++    string(APPEND CMAKE_C_FLAGS " -march=${THEROCK_HOST_MARCH}")
++    string(APPEND CMAKE_CXX_FLAGS " -march=${THEROCK_HOST_MARCH}")
++    message(STATUS "THEROCK_HOST_MARCH: enabled (-march=${THEROCK_HOST_MARCH})")
++  endif()
++endif()
+diff --git a/compiler/CMakeLists.txt b/compiler/CMakeLists.txt
+index 53042d8f..94c0a1a6 100644
+--- a/compiler/CMakeLists.txt
++++ b/compiler/CMakeLists.txt
+@@ -84,6 +84,14 @@ if(THEROCK_ENABLE_COMPILER)
+       -DLLVM_INSTALL_TOOLCHAIN_ONLY=OFF
+       -DLLVM_BUILD_LLVM_C_DYLIB=OFF
+ 
++      # MLIR dialect files at -O3 -march=<anything> OOM during compilation
++      # even with restricted parallelism. The bootstrap compiler gains nothing
++      # from march tuning — THEROCK_HOST_MARCH benefits the ROCm libraries,
++      # not the toolchain. Clear any march flags forwarded via the super-project
++      # CMAKE_C/CXX_FLAGS toolchain mechanism.
++      "-DCMAKE_C_FLAGS="
++      "-DCMAKE_CXX_FLAGS="
++
+       # Build optimizations
+       -DLLVM_BUILD_EXAMPLES=${THEROCK_ENABLE_LLVM_TESTS}
+       -DLLVM_INCLUDE_EXAMPLES=${THEROCK_ENABLE_LLVM_TESTS}
